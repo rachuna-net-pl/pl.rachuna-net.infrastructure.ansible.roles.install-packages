@@ -1,0 +1,38 @@
+---
+- name: "💽 Update cache"
+  include_tasks: "update-apk-cache.yml"
+
+- name: "💾 Install packages"
+  block:
+    - name: "💾 Install packages gpg"
+      apk:
+        name: "gnupg"
+        state: present
+
+    - name: "💾 Install packages from Repo"
+      register: apk_install
+      apk:
+        name: "{{ input_packages_to_install }}"
+        state: present
+      when: input_packages_to_install | length > 0
+
+  rescue:
+    - name: "❌ Install packages failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "{{ apk_install.stderr }}"
+
+- name: "🗑️  Remove packages"
+  block:
+    - name: "🗑️  Remove packages"
+      register: apk_remove
+      apk:
+        name: "{{ input_packages_to_remove }}"
+        state: absent
+      when: input_packages_to_remove | length > 0
+
+  rescue:
+    - name: "❌ Remove packages failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "{{ apk_remove.stderr }}"

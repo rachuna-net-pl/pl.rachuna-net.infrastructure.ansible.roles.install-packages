@@ -1,0 +1,14 @@
+---
+- name: "💽 Update cache"
+  block:
+    - name: "💽 Update cache"
+      changed_when: false
+      register: apk_cache
+      apk:
+        update_cache: true
+
+  rescue:
+    - name: "❌ Update cache failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "{{ apk_cache.stderr }}"

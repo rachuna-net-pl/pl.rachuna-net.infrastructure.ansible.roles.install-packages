@@ -1,0 +1,110 @@
+---
+- name: "💽 Update cache"
+  include_tasks: "update-apt-cache.yml"
+
+- name: "🌐 Add Repositories"
+  block:
+    - name: "💾 Install packages gpg"
+      apt:
+        name:
+          - gpg
+          - wget
+          - apt-transport-https
+          - ca-certificates
+        state: present
+
+    - name: "🔑 Add repositories key"
+      ignore_errors: "{{ item.ignore_errors | default('false') }}"
+      apt_key:
+        url: "{{ item.repository_key | default(omit) }}"
+        keyserver: "{{ item.keyserver | default(omit) }}"
+        id: "{{ item.id | default(omit) }}"
+        state: "{{ item.state | default(omit) }}"
+      loop: "{{ input_ubuntu_repositories }}"
+      when: item.repository_keys is defined
+
+    - name: "🔑 Download and add repository key (Keyring Method)"
+      ansible.builtin.shell: |
+        wget -O - {{ item.self_signed_repository_key }} | gpg --dearmor -o /usr/share/keyrings/{{ item.keyring_name }}
+      args:
+        creates: "/usr/share/keyrings/{{ item.keyring_name }}"
+      loop: "{{ input_ubuntu_repositories }}"
+      when: item.self_signed_repository_key is defined
+
+    - name: "🌐 Add Repositories"
+      apt_repository:
+        repo: "{{ item.repo | default(omit) }}"
+        filename: "{{ item.filename | default(omit) }}"
+        state: "{{ item.state | default(omit) }}"
+        update_cache: true
+      loop: "{{ input_ubuntu_repositories }}"
+
+  rescue:
+    - name: "❌ Add Repositories failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "❌ Add Repositories failed"
+
+- name: "💽 Update cache"
+  include_tasks: "update-apt-cache.yml"
+
+- name: "💾 Upgrade packages"
+  block:
+    - name: "💾 Upgrade packages"
+      register: apt_upgrade
+      apt:
+        upgrade: dist
+        update_cache: true
+      notify: "🚨 Reboot system"
+
+  rescue:
+    - name: "❌ Upgrade packages failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "{{ apt_upgrade.stderr }}"
+
+
+- name: "💾 Install packages from Repo"
+  block:
+    - name: "💾 Install packages from Repo"
+      register: apt_install
+      apt:
+        name: "{{ input_packages_to_install }}"
+        state: present
+      when: input_packages_to_install | length > 0
+
+  rescue:
+    - name: "❌ Install packages failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "{{ apt_install.stderr }}"
+
+- name: "🗑️  Remove packages"
+  block:
+    - name: "🗑️  Remove packages"
+      register: apt_remove
+      apt:
+        name: "{{ input_packages_to_remove }}"
+        state: absent
+      when: input_packages_to_remove | length > 0
+
+  rescue:
+    - name: "❌ Remove packages failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "{{ apt_remove.stderr }}"
+
+- name: "🧹 Clean apt"
+  block:
+    - name: "🗑️  Remove useless packages from the cache"
+      apt:
+        autoclean: true
+
+    - name: "🗑️  Remove dependencies that are no longer required"
+      apt:
+        autoremove: true
+  rescue:
+    - name: "❌ Clean apt failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "❌ Clean apt failed"
