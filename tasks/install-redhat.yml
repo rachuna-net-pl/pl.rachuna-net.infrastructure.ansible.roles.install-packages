@@ -1,0 +1,65 @@
+---
+- name: "💽 Update cache"
+  include_tasks: "update-dnf-cache.yml"
+
+- name: "🌐 Add Repositories"
+  block:
+    - name: "💾 Install packages gpg"
+      dnf:
+        name: "gnupg2"
+        state: present
+
+    - name: "🔑 Add repositories key"
+      rpm_key:
+        state: present
+        key: "{{ item.repository_key }}"
+      loop: "{{ input_redhat_repositories }}"
+      when: item.repository_key is defined
+
+    - name: "🌐 Add Repositories"
+      yum_repository:
+        name: "custom_repo_{{ item.name }}"
+        description: "{{ item.description }}"
+        baseurl: "{{ item.baseurl }}"
+        enabled: true
+        gpgcheck: true
+        gpgkey: "{{ item.gpgkey }}"
+      loop: "{{ input_redhat_repositories }}"
+
+  rescue:
+    - name: "❌ Add Repositories failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "❌ Add Repositories failed"
+
+- name: "💽 Update cache"
+  include_tasks: "update-dnf-cache.yml"
+
+- name: "💾 Install packages from Repo"
+  block:
+    - name: "💾 Install packages from Repo"
+      register: dnf_install
+      dnf:
+        name: "{{ input_packages_to_install }}"
+        state: present
+      when: input_packages_to_install | length > 0
+  rescue:
+    - name: "❌ Install packages failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "{{ dnf_install.stderr }}"
+
+- name: "🗑️  Remove packages"
+  block:
+    - name: "🗑️  Remove packages"
+      register: dnf_remove
+      dnf:
+        name: "{{ input_packages_to_remove }}"
+        state: absent
+      when: input_packages_to_remove | length > 0
+
+  rescue:
+    - name: "❌ Remove packages failed"
+      failed_when: true
+      ansible.builtin.debug:
+        msg: "{{ dnf_remove.stderr }}"
